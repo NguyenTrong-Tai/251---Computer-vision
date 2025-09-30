@@ -72,7 +72,8 @@ with gr.Blocks() as demo:
         if seed is None:
             seed = np.random.randint(1000)
             sketch_states[k][1] = seed
-
+        if curr_sketch is None:
+            curr_sketch = np.ones((512, 512, 3), dtype=np.uint8) * 255
         curr_sketch_image = Image.fromarray(curr_sketch[:, :, 0]).resize((512, 512))
 
         curr_construction_image = Image.fromarray(255 - curr_sketch[:, :, 2] + curr_sketch[:, :, 0])
