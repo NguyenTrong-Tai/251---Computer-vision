@@ -5,8 +5,9 @@ from typing import Any, Callable, Dict, List, Optional, Union
 import sys
 import PIL
 import os
-sys.path.append(os.path.join(os.environ['CONDA_PREFIX'], 'lib/python3.8/site-packages/diffusers/pipelines/controlnet'))
-sys.path.append(os.path.join(os.environ['CONDA_PREFIX'], 'lib/python3.8/site-packages/diffusers'))
+import diffusers
+sys.path.append(os.path.join(diffusers.__path__[0], "pipelines", "controlnet"))
+sys.path.append(diffusers.__path__[0])
 from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
 from diffusers.utils import replace_example_docstring
 from diffusers.image_processor import PipelineImageInput
