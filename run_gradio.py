@@ -29,8 +29,13 @@ with gr.Blocks() as demo:
             with gr.Row():
                 stroke_type = gr.Radio(["Blocking", "Detail"], value="Detail", label="Stroke Type")
                 dilation_strength = gr.Slider(7, 117, value=65, step=2, label="Dilation Strength")
-            canvas = gr.Image(source="canvas", shape=(512, 512), tool="color-sketch",
-                        min_width=512, brush_radius = 2).style(width=512, height=512)
+            canvas = gr.Image(
+                        source="canvas",
+                        tool="color-sketch",
+                        type="numpy",        # ép output luôn là numpy array
+                        shape=(512, 512),
+                        brush_radius=2
+                    ).style(width=512, height=512)
             prompt_box = gr.Textbox(width="50vw", label="Prompt")
             with gr.Row():
                 btn = gr.Button("Generate").style(width=100, height=80)
@@ -73,7 +78,9 @@ with gr.Blocks() as demo:
         if seed is None:
             seed = np.random.randint(1000)
             sketch_states[k][1] = seed
-        
+        if isinstance(curr_sketch, Image.Image):
+            curr_sketch = np.array(curr_sketch)
+
         curr_sketch_image = Image.fromarray(curr_sketch[:, :, 0]).resize((512, 512))
         if curr_sketch_image is None:
             raise ValueError("⚠️ Bạn chưa cung cấp ảnh input cho pipeline!")
