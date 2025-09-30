@@ -153,10 +153,10 @@ with gr.Blocks() as demo:
         curr_num_samples = change
         return None
     
-    btn.click(run_sketching, [prompt_box, canvas, sketch_states, dilation_strength[0]], [gallery0, gallery1, gallery2, gallery3])
-    btn2.click(reset, sketch_states, [canvas, sketch_states])
-    stroke_type[0].change(change_color, [stroke_type[0]], canvas)
-    num_samples[0].change(change_num_samples, [num_samples[0]], None)
+    btn.click(run_sketching, [prompt_box, canvas, sketch_states, dilation_strength], [gallery0, gallery1, gallery2, gallery3])
+    btn2.click(reset, inputs=[sketch_states], outputs=[canvas, sketch_states])
+    stroke_type.change(change_color, inputs=[stroke_type], outputs=canvas)
+    num_samples.change(change_num_samples, inputs=[num_samples], outputs=None)
 
 
 demo.launch(share = True, debug = True)
