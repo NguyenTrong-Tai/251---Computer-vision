@@ -27,8 +27,8 @@ with gr.Blocks() as demo:
     with gr.Row():
         with gr.Column():
             with gr.Row():
-                stroke_type = gr.Radio(["Blocking", "Detail"], value="Detail", label="Stroke Type"),
-                dilation_strength = gr.Slider(7, 117, value=65, step=2, label="Dilation Strength"),
+                stroke_type = gr.Radio(["Blocking", "Detail"], value="Detail", label="Stroke Type")
+                dilation_strength = gr.Slider(7, 117, value=65, step=2, label="Dilation Strength")
             canvas = gr.Image(source="canvas", shape=(512, 512), tool="color-sketch",
                         min_width=512, brush_radius = 2).style(width=512, height=512)
             prompt_box = gr.Textbox(width="50vw", label="Prompt")
@@ -36,15 +36,15 @@ with gr.Blocks() as demo:
                 btn = gr.Button("Generate").style(width=100, height=80)
                 btn2 = gr.Button("Reset").style(width=100, height=80)
         with gr.Column():
-            num_samples = gr.Slider(1, 5, value=2, step=1, label="Num Samples to Generate"),
+            num_samples = gr.Slider(1, 5, value=2, step=1, label="Num Samples to Generate")
             with gr.Tab("Renoised Images"):
-                gallery0 = gr.Gallery(show_label=False, columns=[num_samples[0].value], rows=[2], object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
+                gallery0 = gr.Gallery(show_label=False, columns=[num_samples.value], rows=[2], object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
             with gr.Tab("Renoised Overlay"):
-                gallery1 = gr.Gallery(show_label=False, columns=[num_samples[0].value], rows=[2], object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
+                gallery1 = gr.Gallery(show_label=False, columns=[num_samples.value], rows=[2], object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
             with gr.Tab("Pre-Renoise Images"):
-                gallery2 = gr.Gallery(show_label=False, columns=[num_samples[0].value], rows=[2], object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
+                gallery2 = gr.Gallery(show_label=False, columns=[num_samples.value], rows=[2], object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
             with gr.Tab("Pre-Renoise Overlay"):
-                gallery3 = gr.Gallery(show_label=False, columns=[num_samples[0].value], rows=[2], object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
+                gallery3 = gr.Gallery(show_label=False, columns=[num_samples.value], rows=[2], object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
     for k in range(num_images):
         start_state.append([None, None])
     sketch_states = gr.State(start_state)
@@ -68,13 +68,15 @@ with gr.Blocks() as demo:
         return images, new_images
 
     def run_sketching(prompt, curr_sketch, sketch_states, dilation, contour_dilation=11):
+        k = 0
         seed = sketch_states[k][1]
         if seed is None:
             seed = np.random.randint(1000)
             sketch_states[k][1] = seed
-        if curr_sketch is None:
-            curr_sketch = np.ones((512, 512, 3), dtype=np.uint8) * 255
+        
         curr_sketch_image = Image.fromarray(curr_sketch[:, :, 0]).resize((512, 512))
+        if curr_sketch_image is None:
+            raise ValueError("⚠️ Bạn chưa cung cấp ảnh input cho pipeline!")
 
         curr_construction_image = Image.fromarray(255 - curr_sketch[:, :, 2] + curr_sketch[:, :, 0])
         if np.sum(255 - np.array(curr_construction_image)) == 0:
