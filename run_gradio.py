@@ -1,25 +1,28 @@
 import gradio as gr
 from diffusers import ControlNetModel, EulerAncestralDiscreteScheduler
-import torch 
+import torch
 import numpy as np
-import cv2
 from PIL import Image, ImageFilter
-from interface.extension import CustomStableDiffusionControlNetPipeline
 
-negative_prompt = ""
-device = torch.device('cuda')
-controlnet = ControlNetModel.from_pretrained("partialsketchcontrolnet", torch_dtype=torch.float16).to(device)
+# ⚠️ Thay đường dẫn import bằng pipeline của bạn
+from interface.extension import CustomStableDiffusionControlNetPipeline  
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+controlnet = ControlNetModel.from_pretrained(
+    "partialsketchcontrolnet", torch_dtype=torch.float16
+).to(device)
+
 pipe = CustomStableDiffusionControlNetPipeline.from_pretrained(
     "runwayml/stable-diffusion-v1-5",
-    controlnet=controlnet, torch_dtype=torch.float16
+    controlnet=controlnet,
+    torch_dtype=torch.float16
 ).to(device)
 pipe.safety_checker = None
 pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(pipe.scheduler.config)
-threshold = 250
+
 curr_num_samples = 2
-
 all_gens = []
-
 num_images = 5
 
 with gr.Blocks() as demo:
@@ -30,60 +33,77 @@ with gr.Blocks() as demo:
                 stroke_type = gr.Radio(["Blocking", "Detail"], value="Detail", label="Stroke Type")
                 dilation_strength = gr.Slider(7, 117, value=65, step=2, label="Dilation Strength")
             canvas = gr.Image(
-                        source="canvas",
-                        tool="color-sketch",
-                        type="numpy",        # ép output luôn là numpy array
-                        shape=(512, 512),
-                        brush_radius=2
-                    ).style(width=512, height=512)
-            prompt_box = gr.Textbox(width="50vw", label="Prompt")
+                tool="color-sketch",
+                type="numpy",   # bắt buộc: để lấy numpy array
+                shape=(512, 512),
+                brush_radius=2
+            ).style(width=512, height=512)
+            prompt_box = gr.Textbox(label="Prompt")
             with gr.Row():
                 btn = gr.Button("Generate").style(width=100, height=80)
                 btn2 = gr.Button("Reset").style(width=100, height=80)
         with gr.Column():
             num_samples = gr.Slider(1, 5, value=2, step=1, label="Num Samples to Generate")
             with gr.Tab("Renoised Images"):
-                gallery0 = gr.Gallery(show_label=False, columns=[num_samples.value], rows=[2], object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
+                gallery0 = gr.Gallery(show_label=False, object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
             with gr.Tab("Renoised Overlay"):
-                gallery1 = gr.Gallery(show_label=False, columns=[num_samples.value], rows=[2], object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
+                gallery1 = gr.Gallery(show_label=False, object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
             with gr.Tab("Pre-Renoise Images"):
-                gallery2 = gr.Gallery(show_label=False, columns=[num_samples.value], rows=[2], object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
+                gallery2 = gr.Gallery(show_label=False, object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
             with gr.Tab("Pre-Renoise Overlay"):
-                gallery3 = gr.Gallery(show_label=False, columns=[num_samples.value], rows=[2], object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
+                gallery3 = gr.Gallery(show_label=False, object_fit="contain", height="auto", preview=True, interactive=False).style(width=512, height=512)
+
     for k in range(num_images):
         start_state.append([None, None])
     sketch_states = gr.State(start_state)
-    checkbox_state = gr.State(True)
-        
+
+    # =========================
+    # Functions
+    # =========================
     def sketch(curr_sketch_image, dilation_mask, prompt, seed, num_steps, dilation):
         global curr_num_samples
-        generator = torch.Generator(device="cuda:0")
-        generator.manual_seed(seed)
-
+        generator = torch.Generator(device="cuda:0").manual_seed(seed)
         negative_prompt = ""
         guidance_scale = 7
         controlnet_conditioning_scale = 1.0
-        images = pipe([prompt]*curr_num_samples, [curr_sketch_image.convert("RGB").point( lambda p: 256 if p > 128 else 0)]*curr_num_samples, guidance_scale=guidance_scale, controlnet_conditioning_scale = controlnet_conditioning_scale, negative_prompt = [negative_prompt] * curr_num_samples, num_inference_steps=num_steps, generator=generator, key_image=None, neg_mask=None).images
 
-        # run blended renoising if blocking strokes are provided
-        if dilation_mask is not None: 
-            new_images = pipe.collage([prompt] * curr_num_samples, images, [dilation_mask] * curr_num_samples, num_inference_steps=50, strength=0.8)["images"]
+        images = pipe(
+            [prompt]*curr_num_samples,
+            [curr_sketch_image.convert("RGB").point(lambda p: 256 if p > 128 else 0)]*curr_num_samples,
+            guidance_scale=guidance_scale,
+            controlnet_conditioning_scale=controlnet_conditioning_scale,
+            negative_prompt=[negative_prompt]*curr_num_samples,
+            num_inference_steps=num_steps,
+            generator=generator,
+            key_image=None,
+            neg_mask=None
+        ).images
+
+        if dilation_mask is not None:
+            new_images = pipe.collage(
+                [prompt]*curr_num_samples, images, [dilation_mask]*curr_num_samples,
+                num_inference_steps=50, strength=0.8
+            )["images"]
         else:
             new_images = images
         return images, new_images
 
     def run_sketching(prompt, curr_sketch, sketch_states, dilation, contour_dilation=11):
+        if curr_sketch is None:
+            raise ValueError("⚠️ Hãy vẽ gì đó trên canvas trước khi Generate.")
+
         k = 0
         seed = sketch_states[k][1]
         if seed is None:
             seed = np.random.randint(1000)
             sketch_states[k][1] = seed
+
         if isinstance(curr_sketch, Image.Image):
             curr_sketch = np.array(curr_sketch)
 
         curr_sketch_image = Image.fromarray(curr_sketch[:, :, 0]).resize((512, 512))
         if curr_sketch_image is None:
-            raise ValueError("⚠️ Bạn chưa cung cấp ảnh input cho pipeline!")
+            raise ValueError("⚠️ Không tạo được ảnh từ sketch.")
 
         curr_construction_image = Image.fromarray(255 - curr_sketch[:, :, 2] + curr_sketch[:, :, 0])
         if np.sum(255 - np.array(curr_construction_image)) == 0:
@@ -93,17 +113,17 @@ with gr.Blocks() as demo:
 
         if curr_construction_image is not None:
             dilation_mask = Image.fromarray(255 - np.array(curr_construction_image)).filter(ImageFilter.MaxFilter(dilation))
-            dilation_mask = dilation_mask.point( lambda p: 256 if p > 0 else 25).filter(ImageFilter.GaussianBlur(radius = 5))
+            dilation_mask = dilation_mask.point(lambda p: 256 if p > 0 else 25).filter(ImageFilter.GaussianBlur(radius=5))
 
             neg_dilation_mask = Image.fromarray(255 - np.array(curr_detail_image)).filter(ImageFilter.MaxFilter(contour_dilation)) 
-            neg_dilation_mask = np.array(neg_dilation_mask.point( lambda p: 256 if p > 0 else 0))
+            neg_dilation_mask = np.array(neg_dilation_mask.point(lambda p: 256 if p > 0 else 0))
             dilation_mask = np.array(dilation_mask)
             dilation_mask[neg_dilation_mask > 0] = 25
-            dilation_mask = Image.fromarray(dilation_mask).filter(ImageFilter.GaussianBlur(radius = 5))
+            dilation_mask = Image.fromarray(dilation_mask).filter(ImageFilter.GaussianBlur(radius=5))
         else:
             dilation_mask = None
-        
-        images, new_images = sketch(curr_sketch_image, dilation_mask, prompt, seed, num_steps = 40, dilation = dilation)
+
+        images, new_images = sketch(curr_sketch_image, dilation_mask, prompt, seed, num_steps=40, dilation=dilation)
 
         save_sketch = np.array(Image.fromarray(curr_sketch).convert("RGBA"))
         save_sketch[:, :, 3][save_sketch[:, :, 0] > 128] = 0
@@ -112,7 +132,7 @@ with gr.Blocks() as demo:
         for i in images:
             background = i.copy()
             background.putalpha(80)
-            background = Image.alpha_composite(Image.fromarray(255 * np.ones((512, 512)).astype(np.uint8)).convert("RGBA"), background)
+            background = Image.alpha_composite(Image.fromarray(255*np.ones((512, 512), dtype=np.uint8)).convert("RGBA"), background)
             overlay = Image.alpha_composite(background.resize((512, 512)), Image.fromarray(save_sketch).convert("RGBA"))
             overlays.append(overlay.convert("RGB"))
 
@@ -120,10 +140,10 @@ with gr.Blocks() as demo:
         for i in new_images:
             background = i.copy()
             background.putalpha(80)
-            background = Image.alpha_composite(Image.fromarray(255 * np.ones((512, 512)).astype(np.uint8)).convert("RGBA"), background)
+            background = Image.alpha_composite(Image.fromarray(255*np.ones((512, 512), dtype=np.uint8)).convert("RGBA"), background)
             overlay = Image.alpha_composite(background.resize((512, 512)), Image.fromarray(save_sketch).convert("RGBA"))
             new_overlays.append(overlay.convert("RGB"))
-        
+
         global all_gens
         all_gens = new_images
 
@@ -133,37 +153,21 @@ with gr.Blocks() as demo:
         for k in range(len(sketch_states)):
             sketch_states[k] = [None, None]
         return None, sketch_states
-    
-    def change_color(stroke_type):
-        if stroke_type == "Blocking":
-            color = "#0000FF"
-        else:
-            color = "#000000"
-        return gr.Image(source="canvas", shape=(512, 512), tool="color-sketch",
-                                min_width=512, brush_radius = 2, brush_color=color).style(width=400, height=400)
-    
-    def change_background(option):
-        global all_gens
-        if option == "None" or len(all_gens) == 0:
-            return None
-        elif option == "Sample 0":
-            image_overlay = all_gens[0].copy()
-        elif option == "Sample 1":
-            image_overlay = all_gens[0].copy()
-        else:
-            return None
-        image_overlay.putalpha(80)
-        return image_overlay
 
     def change_num_samples(change):
         global curr_num_samples
         curr_num_samples = change
         return None
-    
-    btn.click(run_sketching, [prompt_box, canvas, sketch_states, dilation_strength], [gallery0, gallery1, gallery2, gallery3])
+
+    # =========================
+    # Events
+    # =========================
+    btn.click(run_sketching, [prompt_box, canvas, sketch_states, dilation_strength],
+              [gallery0, gallery1, gallery2, gallery3])
     btn2.click(reset, inputs=[sketch_states], outputs=[canvas, sketch_states])
-    stroke_type.change(change_color, inputs=[stroke_type], outputs=canvas)
     num_samples.change(change_num_samples, inputs=[num_samples], outputs=None)
 
-
-demo.launch(share = True, debug = True)
+# ====================================
+# 3. Launch app
+# ====================================
+demo.launch(share=True, debug=True)
